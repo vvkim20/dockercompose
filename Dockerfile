@@ -1,29 +1,42 @@
-FROM mcr.microsoft.com/mssql/server
-# https://hub.docker.com/_/microsoft-mssql-server
-# ARG DEBIAN_FRONTEND=noninteractive
+FROM ubuntu:16.04
+ARG DB_PASSWORD
+ENV SA_PASSWORD=${DB_PASSWORD}
 ENV ACCEPT_EULA=Y
-RUN apt-get -y update 
-RUN apt-get install -y dialog apt-utils 
-RUN apt-get install -y libreadline6 libreadline6-dev 
-RUN apt-get install -y curl 
-RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - 
-RUN curl https://packages.microsoft.com/config/ubuntu/16.04/mssql-server-2017.list | tee /etc/apt/sources.list.d/mssql-server.list 
-RUN apt-get -y update 
-RUN apt-get install -y mssql-server-fts 
-# RUN systemctl restart mssql-server.service
-# WORKDIR /usr/src/app
-# COPY . /usr/src/app
+ENV CONFIG_PATH /usr/config/sqlserver
 
-# # Grant permissions for the import-data script to be executable
-# RUN chmod +x /usr/src/app/import-data.sh
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -yq curl apt-transport-https && \
+    # Get official Microsoft repository configuration
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/16.04/mssql-server-2019.list | tee /etc/apt/sources.list.d/mssql-server.list && \
+    curl https://packages.microsoft.com/config/ubuntu/16.04/prod.list | tee /etc/apt/sources.list.d/msprod.list && \
+    apt-get update && \
+    # Install SQL Server from apt
+    apt-get install -y mssql-server && \
+    # Install optional packages
+    apt-get install -y mssql-server-ha && \
+    apt-get install -y mssql-server-fts && \
+    apt-get install -y mssql-tools unixodbc-dev && \
+    apt-get install -y locales && \
+    # Cleanup the Dockerfile
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists
 
-# WORKDIR /usr/src/app
+RUN locale-gen en_US.UTF-8
 
-# CMD /bin/bash ./import-data.sh
-# WORKDIR /temp/scripts
-# COPY test.sql .
+# Create a config directory
+RUN mkdir -p ${CONFIG_PATH}
+WORKDIR ${CONFIG_PATH}
 
-# CMD /bin/bash
+# Bundle config source
+COPY . /usr/config
 
+# Grant permissions for to our scripts to be executable
+RUN chmod +x configure-db.sh
+RUN chmod +x entrypoint.sh
 
-# docker build .
+ENTRYPOINT "./entrypoint.sh"
+
+# https://github.com/microsoft/mssql-docker/tree/master/linux/preview/examples/mssql-customize
+# https://github.com/Microsoft/mssql-docker/blob/master/linux/preview/examples/mssql-agent-fts-ha-tools/Dockerfile
